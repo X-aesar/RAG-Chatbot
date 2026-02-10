@@ -1,8 +1,8 @@
 // src/app/upload/actions.ts
 "use server";
 
-import { PDFParse } from "pdf-parse";
-
+import { pdfProcessor } from "@/lib/pdf-processor";
+import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db-config";
 import { documents } from "@/lib/db-schema";
@@ -11,6 +11,15 @@ import { chunkContent } from "@/lib/chunking";
 
 export async function processPdfFile(formData: FormData) {
   try {
+    const { userId } = await auth();
+    
+    if (!userId) {
+      return {
+        success: false,
+        error: "You must be logged in to upload documents",
+      };
+    }
+
     const file = formData.get("pdf") as File;
     
     // Validate file
@@ -44,14 +53,10 @@ export async function processPdfFile(formData: FormData) {
     console.log("Step 2: Buffer created, size:", buffer.length);
     
     console.log("Step 3: Starting PDF parsing...");
-    const parser = new PDFParse({ data: buffer });
-    console.log("Step 4: Parser created, extracting text...");
-    const data = await parser.getText();
-    console.log("Step 5: Text extracted, length:", data.text?.length || 0);
-    await parser.destroy();
-    console.log("Step 6: Parser destroyed");
+    const text = await pdfProcessor.extractText(buffer);
+    console.log("Step 4: Text extracted, length:", text.length);
 
-    if (!data.text || data.text.trim().length === 0) {
+    if (!text || text.trim().length === 0) {
       return {
         success: false,
         error: "No text found in PDF",
@@ -60,7 +65,7 @@ export async function processPdfFile(formData: FormData) {
 
     // Chunk the text
     console.log("Chunking text...");
-    const chunks = await chunkContent(data.text);
+    const chunks = await chunkContent(text);
     console.log(`Created ${chunks.length} chunks`);
 
     // Generate embeddings in batches to avoid rate limits
@@ -68,11 +73,16 @@ export async function processPdfFile(formData: FormData) {
     const embeddings = await generateEmbeddings(chunks);
     console.log(`Generated ${embeddings.length} embeddings`);
 
-    // Store in database
+    // Store in database with user metadata
     console.log("Storing in database...");
     const records = chunks.map((chunk, index) => ({
       content: chunk,
       embedding: embeddings[index],
+      title: file.name.replace('.pdf', ''),
+      userId: userId,
+      fileName: file.name,
+      fileSize: file.size,
+      chunkIndex: index,
     }));
 
     await db.insert(documents).values(records);

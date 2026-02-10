@@ -1,7 +1,8 @@
 import {streamText, UIMessage, convertToModelMessages, tool,InferUITools,UIDataTypes, stepCountIs} from "ai";
 import{ openai} from "@ai-sdk/openai";
 import {z} from "zod";
-import { searchDocuments } from "@/lib/search";
+import { auth } from "@clerk/nextjs/server";
+import { searchDocuments, SearchResult } from "@/lib/search";
 
 const tools ={
     searchKnowledgeBase : tool({
@@ -12,7 +13,12 @@ const tools ={
         execute: async ({query})=>{
             console.log("Tool called with query:", query);
             try{
-                const results = await searchDocuments(query,5,0.3)
+                const { userId } = await auth();
+                if (!userId) {
+                    return "Error: User not authenticated";
+                }
+
+                const results = await searchDocuments(query, userId, 5, 0.3);
                 console.log("Search returned:", results.length, "results");
 
                 if (results.length ===0){
@@ -20,11 +26,13 @@ const tools ={
                     return "No relevant information found in the knowledge base for this query.";
                 }
 
-                const formattedResults = results.map((result,index)=> `[${index+1}] ${result.content}`).join("\n\n");
+                const formattedResults = results.map((result,index)=> {
+                    const source = result.title || result.fileName || `Document ${result.id}`;
+                    return `[${index+1}] From "${source}":\n${result.content}`;
+                }).join("\n\n");
+                
                 console.log("Formatted results length:", formattedResults.length);
                 return formattedResults;
-
-
 
             }catch (error){
                 console.error("Search error:", error);
@@ -39,6 +47,11 @@ export type ChatMessage = UIMessage<never,UIDataTypes,ChatTools>;
 
 export async function POST(req:Request){
     try{
+        const { userId } = await auth();
+        if (!userId) {
+            return new Response("Unauthorized", { status: 401 });
+        }
+
         const {messages}: {messages: ChatMessage[]} = await req.json();
         console.log("Chat API called with messages:", messages.length);
 
@@ -46,22 +59,22 @@ export async function POST(req:Request){
             model: openai("gpt-4o-mini"),
             messages: await convertToModelMessages(messages),
             tools,
-            system: `You are a helpful assistant with access to a knowledge base of uploaded documents.
+            system: `You are a helpful assistant with access to a personal knowledge base of uploaded documents.
             
-IMPORTANT: For ANY question that asks about information that might be in the documents (names, people, data, etc.), you MUST use the searchKnowledgeBase tool first. Do not answer from general knowledge.
+IMPORTANT: For ANY question that asks about information that might be in the documents (names, people, data, etc.), you MUST use the searchKnowledgeBase tool first. Do not answer from general knowledge unless explicitly asked.
             
-Steps:
+Guidelines:
 1. If the user asks about specific information, search the knowledge base first
-2. Use the search results to provide your answer
-3. If no relevant information is found, clearly state that
-4. Be concise and direct in your responses`,
+2. Use the search results to provide accurate answers based on the uploaded documents
+3. Always cite your sources when using information from documents
+4. If no relevant information is found, clearly state that
+5. Be helpful, accurate, and concise in your responses
+6. When you find relevant information, mention which document it came from`,
             stopWhen: stepCountIs(2),
 
         });
 
         return result.toUIMessageStreamResponse();
-
-
 
     } catch(error){
         console.error("Error streaming response", error);

@@ -1,12 +1,30 @@
 "use server";
 
-import { PDFParse } from "pdf-parse";
+import { pdfProcessor } from "@/lib/pdf-processor";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db-config";
 import { documents } from "@/lib/db-schema";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { chunkContent } from "@/lib/chunking";
 
 export async function processPdfFileWithProgress(formData: FormData) {
+  const authResult = await auth();
+  const userId = authResult?.userId;
+  
+  if (!userId) {
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const errorData = `data: ${JSON.stringify({ status: "error", message: "You must be logged in to upload documents" })}\n\n`;
+          controller.enqueue(encoder.encode(errorData));
+          controller.close();
+        },
+      }),
+      { headers: { "Content-Type": "text/plain" } }
+    );
+  }
+
   const file = formData.get("pdf") as File;
   
   // Validate file
@@ -64,13 +82,11 @@ export async function processPdfFileWithProgress(formData: FormData) {
       const buffer = Buffer.from(bytes);
       yield { status: "parsing", message: `Buffer created (${Math.round(buffer.length/1024)}KB), parsing PDF...` };
       
-      const parser = new PDFParse({ data: buffer });
       yield { status: "parsing", message: "Extracting text from PDF..." };
-      const data = await parser.getText();
-      await parser.destroy();
-      yield { status: "parsing", message: `Text extracted (${Math.round((data.text?.length || 0)/1024)}KB)` };
+      const text = await pdfProcessor.extractText(buffer);
+      yield { status: "parsing", message: `Text extracted (${Math.round(text.length/1024)}KB)` };
 
-      if (!data.text || data.text.trim().length === 0) {
+      if (!text || text.trim().length === 0) {
         yield { status: "error", message: "No text found in PDF" };
         return;
       }
@@ -78,7 +94,7 @@ export async function processPdfFileWithProgress(formData: FormData) {
       yield { status: "chunking", message: "Splitting text into chunks..." };
       
       // Chunk the text
-      const chunks = await chunkContent(data.text);
+      const chunks = await chunkContent(text);
       yield { status: "chunking", message: `Created ${chunks.length} text chunks` };
 
       yield { status: "embedding", message: "Generating embeddings..." };
@@ -93,6 +109,11 @@ export async function processPdfFileWithProgress(formData: FormData) {
       const records = chunks.map((chunk, index) => ({
         content: chunk,
         embedding: embeddings[index],
+        title: file.name.replace('.pdf', ''),
+        userId: userId as string,
+        fileName: file.name,
+        fileSize: file.size,
+        chunkIndex: index,
       }));
 
       await db.insert(documents).values(records);

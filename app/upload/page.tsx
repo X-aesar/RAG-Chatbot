@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
 
 export default function PDFUpload() {
   const [isLoading, setIsLoading] = useState(false);
@@ -102,50 +105,61 @@ export default function PDFUpload() {
         <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">
           PDF Upload
         </h1>
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="pdf-upload">Upload PDF File</Label>
-                <Input
-                  id="pdf-upload"
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileUpload}
-                  disabled={isLoading}
-                  className="mt-2"
-                />
-              </div>
+        
+        <SignedOut>
+          <Card className="mb-6">
+            <CardContent className="pt-6 text-center">
+              <p className="text-gray-600 mb-4">Please sign in to upload documents.</p>
+            </CardContent>
+          </Card>
+        </SignedOut>
 
-              {isLoading && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-muted-foreground">
-                      Processing PDF...
-                    </span>
-                  </div>
-                  {progress && (
-                    <div className="text-sm text-muted-foreground pl-7">
-                      {progress}
-                    </div>
-                  )}
+        <SignedIn>
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="pdf-upload">Upload PDF File</Label>
+                  <Input
+                    id="pdf-upload"
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    disabled={isLoading}
+                    className="mt-2"
+                  />
                 </div>
-              )}
 
-              {message && (
-                <Alert
-                  variant={message.type === "error" ? "destructive" : "default"}
-                >
-                  <AlertTitle>
-                    {message.type === "error" ? "Error!" : "Success!"}
-                  </AlertTitle>
-                  <AlertDescription>{message.text}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                {isLoading && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="text-muted-foreground">
+                        Processing PDF...
+                      </span>
+                    </div>
+                    {progress && (
+                      <div className="text-sm text-muted-foreground pl-7">
+                        {progress}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {message && (
+                  <Alert
+                    variant={message.type === "error" ? "destructive" : "default"}
+                  >
+                    <AlertTitle>
+                      {message.type === "error" ? "Error!" : "Success!"}
+                    </AlertTitle>
+                    <AlertDescription>{message.text}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </SignedIn>
       </div>
     </div>
   );
