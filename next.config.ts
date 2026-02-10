@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   turbopack: {},
   experimental: {
     webpackBuildWorker: true,
+    serverActions: {
+      bodySizeLimit: '10mb'
+    }
   },
 
 };
