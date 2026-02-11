@@ -1,46 +1,13 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs/promises';
-import path from 'path';
-
-const execAsync = promisify(exec);
+import pdfParse from 'pdf-parse';
 
 export class PDFProcessor {
-  private tempDir: string;
-
-  constructor() {
-    this.tempDir = path.join(process.cwd(), 'temp');
-  }
-
-  private async ensureTempDir() {
-    try {
-      await fs.access(this.tempDir);
-    } catch {
-      await fs.mkdir(this.tempDir, { recursive: true });
-    }
-  }
-
   async extractText(buffer: Buffer): Promise<string> {
-    await this.ensureTempDir();
-    
-    const tempPath = path.join(this.tempDir, `temp-${Date.now()}.pdf`);
-    
     try {
-      await fs.writeFile(tempPath, buffer);
-      
-      // Use pdftotext for reliable server-side PDF processing
-      const { stdout } = await execAsync(`pdftotext "${tempPath}" -`);
-      return stdout.trim();
+      const data = await pdfParse(buffer);
+      return data.text;
     } catch (error) {
       console.error('PDF extraction failed:', error);
       throw new Error('Failed to extract text from PDF');
-    } finally {
-      // Cleanup
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
     }
   }
 
@@ -54,52 +21,22 @@ export class PDFProcessor {
     modificationDate?: string;
     pageCount?: number;
   }> {
-    await this.ensureTempDir();
-    
-    const tempPath = path.join(this.tempDir, `temp-${Date.now()}.pdf`);
-    
     try {
-      await fs.writeFile(tempPath, buffer);
+      const data = await pdfParse(buffer);
       
-      // Use pdfinfo to extract metadata
-      const { stdout } = await execAsync(`pdfinfo "${tempPath}"`);
-      
-      const metadata: any = {};
-      const lines = stdout.split('\n');
-      
-      for (const line of lines) {
-        const match = line.match(/^([^:]+):\s*(.+)$/);
-        if (match) {
-          const [, key, value] = match;
-          switch (key.toLowerCase()) {
-            case 'title':
-            case 'author':
-            case 'subject':
-            case 'creator':
-            case 'producer':
-              metadata[key.toLowerCase()] = value;
-              break;
-            case 'pages':
-              metadata.pageCount = parseInt(value);
-              break;
-            case 'creationdate':
-            case 'moddate':
-              metadata[key.toLowerCase() === 'moddate' ? 'modificationDate' : 'creationDate'] = value;
-              break;
-          }
-        }
-      }
-      
-      return metadata;
+      return {
+        title: data.info?.Title,
+        author: data.info?.Author,
+        subject: data.info?.Subject,
+        creator: data.info?.Creator,
+        producer: data.info?.Producer,
+        creationDate: data.info?.CreationDate,
+        modificationDate: data.info?.ModDate,
+        pageCount: data.numpages
+      };
     } catch (error) {
       console.error('PDF metadata extraction failed:', error);
       return {};
-    } finally {
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
     }
   }
 }
