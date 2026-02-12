@@ -83,7 +83,6 @@ export class RagSystem {
         fileName: document.metadata.fileName,
         fileSize: document.metadata.fileSize,
         chunkIndex: chunk.chunkIndex,
-        fileType: document.metadata.sourceType,
       }));
 
       await db.insert(documents).values(records);
