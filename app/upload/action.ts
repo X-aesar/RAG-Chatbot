@@ -1,7 +1,7 @@
 // src/app/upload/actions.ts
 "use server";
 
-import { PDFParse } from "pdf-parse";
+import  PDFParse  from "pdf-parse";
 
 
 import { db } from "@/lib/db-config";
@@ -17,7 +17,7 @@ export async function processPdfFile(formData: FormData) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    const parser = new PDFParse({ data: buffer });
+    const parser = new PDFParse(buffer);
     const data = await parser.getText();
     await parser.destroy();
 

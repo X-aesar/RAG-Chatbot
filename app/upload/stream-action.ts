@@ -1,6 +1,6 @@
 "use server";
 
-import { PDFParse } from "pdf-parse";
+import PdfParse from "pdf-parse";
 import { db } from "@/lib/db-config";
 import { documents } from "@/lib/db-schema";
 import { generateEmbeddings } from "@/lib/embeddings";
@@ -17,9 +17,7 @@ export async function processPdfFileWithProgress(formData: FormData) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
       
-      const parser = new PDFParse({ data: buffer });
-      const data = await parser.getText();
-      await parser.destroy();
+      const data = await PdfParse(buffer);
 
       if (!data.text || data.text.trim().length === 0) {
         yield { status: "error", message: "No text found in PDF" };
