@@ -17,9 +17,7 @@ export async function processPdfFile(formData: FormData) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    const parser = new PDFParse(buffer);
-    const data = await parser.getText();
-    await parser.destroy();
+    const data = await PDFParse(buffer);
 
     if (!data.text || data.text.trim().length === 0) {
       return {
