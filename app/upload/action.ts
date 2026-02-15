@@ -1,7 +1,7 @@
 // src/app/upload/actions.ts
 "use server";
 
-import  PDFParse  from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 
 
 import { db } from "@/lib/db-config";
@@ -17,9 +17,11 @@ export async function processPdfFile(formData: FormData) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    const data = await PDFParse(buffer);
-
-    if (!data.text || data.text.trim().length === 0) {
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    
+    if (!result.text || result.text.trim().length === 0) {
       return {
         success: false,
         error: "No text found in PDF",
@@ -28,7 +30,7 @@ export async function processPdfFile(formData: FormData) {
 
     // Chunk the text
     console.log("Chunking text...");
-    const chunks = await chunkContent(data.text);
+    const chunks = await chunkContent(result.text);
     console.log(`Created ${chunks.length} chunks`);
 
     // Generate embeddings in batches to avoid rate limits

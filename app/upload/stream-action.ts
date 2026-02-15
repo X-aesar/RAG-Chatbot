@@ -1,6 +1,6 @@
 "use server";
 
-import PdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import { db } from "@/lib/db-config";
 import { documents } from "@/lib/db-schema";
 import { generateEmbeddings } from "@/lib/embeddings";
@@ -17,17 +17,19 @@ export async function processPdfFileWithProgress(formData: FormData) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
       
-      const data = await PdfParse(buffer);
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
 
-      if (!data.text || data.text.trim().length === 0) {
+      if (!result.text || result.text.trim().length === 0) {
         yield { status: "error", message: "No text found in PDF" };
+        await parser.destroy();
         return;
       }
 
       yield { status: "chunking", message: "Splitting text into chunks..." };
       
       // Chunk the text
-      const chunks = await chunkContent(data.text);
+      const chunks = await chunkContent(result.text);
       yield { status: "chunking", message: `Created ${chunks.length} text chunks` };
 
       yield { status: "embedding", message: "Generating embeddings..." };
@@ -46,7 +48,9 @@ export async function processPdfFileWithProgress(formData: FormData) {
 
       await db.insert(documents).values(records);
       
-      yield { 
+      await parser.destroy();
+      
+      yield {
         status: "complete", 
         message: `Successfully processed ${file.name} - created ${records.length} searchable chunks` 
       };
